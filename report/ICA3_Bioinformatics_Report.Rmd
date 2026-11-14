@@ -1,0 +1,127 @@
+---
+title: "Transcriptomic Analysis of Lung Cancer and Adjacent Normal Lung Tissue"
+author: "Bioinformatics Project"
+date: "`r Sys.Date()`"
+output:
+  html_document:
+    toc: true
+    toc_depth: 3
+    number_sections: true
+    theme: readable
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE,
+                      fig.width = 8, fig.height = 5)
+# Use the repository root as the working directory while rendering this report.
+knitr::opts_knit$set(root.dir = normalizePath(".."))
+if (!file.exists("results/differential_expression_all.csv")) {
+  source("code/run_analysis.R")
+}
+de <- read.csv("results/differential_expression_all.csv")
+groups <- read.csv("results/group_counts.csv")
+manifest <- read.csv("results/analysis_sample_manifest.csv")
+```
+
+# Abstract
+
+This project examines gene-expression differences between lung cancer and adjacent normal lung tissue using the public Affymetrix microarray series GSE19804. The assessment archive provides nine raw CEL files, GSM494667–GSM494675. GEO metadata identify these as adjacent normal lung samples; therefore, they cannot alone support a tumour-versus-normal comparison. The analysis preserves and preprocesses these nine files, then retrieves the parent GEO series matrix and metadata for the group comparison. RMA preprocessing, exploratory plots, principal component analysis, and limma differential-expression testing are used. All numerical results below are generated from the retrieved data at run time.
+
+# Introduction
+
+Lung cancer is a major health problem. Gene-expression profiling can reveal molecular differences between tumour tissue and adjacent normal tissue and can help generate hypotheses about disease biology. The dataset analysed here is GSE19804, a GEO study of transcriptional modulation in non-smoking female lung cancer patients in Taiwan.
+
+The objective is to identify probe sets with different expression between tumour and adjacent normal tissue. The working hypothesis is that the two tissue groups have measurable transcriptomic differences. This analysis is observational: a statistically associated gene is not necessarily a cause of cancer.
+
+# Data
+
+The nine supplied CEL files are stored in `data/raw_CEL/`. Their GEO sample identifiers are GSM494667–GSM494675. GEO identifies these as adjacent normal lung tissue samples measured on GPL570, the Affymetrix Human Genome U133 Plus 2.0 array. Because the supplied archive contains only normal samples, the full parent series matrix is retrieved from GEOquery for the two-group comparison.
+
+```{r group-counts}
+knitr::kable(groups, caption = "Number of samples included in each tissue group.")
+```
+
+```{r data-description}
+cat("Number of samples in the differential-expression analysis:", nrow(manifest), "\n")
+cat("Number of probe sets tested:", nrow(de), "\n")
+```
+
+# Methods
+
+The supplied CEL files are imported using `affy::ReadAffy()` and summarised using Robust Multi-array Average (RMA). The resulting log2 expression values are used for sample-level quality control, including expression distributions, sample correlation, and PCA.
+
+The parent GSE19804 series matrix is retrieved using GEOquery. Samples are classified from the GEO sample annotations as tumour or adjacent normal. The script stops if both groups cannot be identified safely. A linear model is fitted to each probe set using limma, and empirical Bayes moderation is applied. P-values are adjusted using the Benjamini–Hochberg procedure. Adjusted p-value below 0.05 is the predefined significance threshold.
+
+# Results
+
+## Quality control of the nine uploaded CEL files
+
+The following figures describe the nine uploaded adjacent-normal samples only.
+
+```{r cel-qc, echo=FALSE, out.width="90%"}
+knitr::include_graphics(c("figures/uploaded_CEL_boxplot.png",
+                          "figures/uploaded_CEL_sample_correlation.png",
+                          "figures/uploaded_CEL_PCA.png"))
+```
+
+## Exploratory analysis of the full cohort
+
+```{r cohort-pca, echo=FALSE, out.width="85%"}
+knitr::include_graphics(c("figures/full_cohort_boxplot.png",
+                          "figures/full_cohort_PCA.png"))
+```
+
+## Differential expression
+
+```{r de-summary}
+sig <- subset(de, adj.P.Val < 0.05)
+cat("Probe sets with BH-adjusted p-value < 0.05:", nrow(sig), "\n")
+cat("Probe sets with positive log2 fold change:", sum(sig$logFC > 0), "\n")
+cat("Probe sets with negative log2 fold change:", sum(sig$logFC < 0), "\n")
+```
+
+```{r volcano, echo=FALSE, out.width="85%"}
+knitr::include_graphics("figures/volcano_plot.png")
+```
+
+```{r top-table}
+display_cols <- intersect(c("probe_id", "gene_symbol", "gene_name",
+                            "logFC", "AveExpr", "P.Value", "adj.P.Val"),
+                          names(de))
+knitr::kable(head(de[, display_cols, drop=FALSE], 20),
+             digits = 4, caption = "Top 20 probe sets ranked by unadjusted p-value.")
+```
+
+```{r heatmap, echo=FALSE, out.width="90%"}
+knitr::include_graphics("figures/top30_expression_heatmap.png")
+```
+
+# Discussion
+
+Interpret the actual outputs above rather than assuming that every dataset will produce significant genes. Probe sets with adjusted p-value below 0.05 provide statistical evidence of a difference under the fitted model. Positive log2 fold change indicates higher expression in tumour relative to adjacent normal tissue; negative log2 fold change indicates lower expression in tumour. Gene symbols are annotation labels and should be checked against current biological databases before making gene-specific claims.
+
+Several limitations affect interpretation. First, the nine supplied raw CEL files are all adjacent-normal samples, so they are used for preprocessing and QC but not treated as a tumour group. Second, the parent cohort is from non-smoking female patients in Taiwan, limiting generalisation to other populations. Third, adjacent normal tissue may show field effects and is not necessarily equivalent to tissue from healthy individuals. Fourth, microarray probes may have cross-hybridisation or outdated annotations. Finally, differential expression indicates association, not causation. Independent validation is needed before any candidate gene can be considered a biomarker.
+
+# Conclusion
+
+This reproducible workflow analyses the supplied raw CEL files and uses the parent public GEO series for a scientifically interpretable tumour-versus-adjacent-normal comparison. The final conclusions should be based on the sample counts, adjusted p-values, effect sizes, and plots generated by the run, and should be revised if data retrieval or metadata filtering changes.
+
+# Reproducibility
+
+Run from the repository root:
+
+```r
+source("code/install_packages.R")
+source("code/run_analysis.R")
+rmarkdown::render("report/Bioinformatics_Report.Rmd")
+```
+
+The workflow requires internet access on first run to retrieve GSE19804 and install packages. Session information is saved to `results/sessionInfo.txt`.
+
+# References
+
+1. NCBI Gene Expression Omnibus. GSE19804. https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE19804
+2. NCBI GEO sample GSM494667. https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSM494667
+3. Ritchie ME, et al. limma powers differential expression analyses for RNA-sequencing and microarray studies. *Nucleic Acids Research*. 2015;43(7):e47. https://doi.org/10.1093/nar/gkv007
+4. Irizarry RA, et al. Exploration, normalization, and summaries of high density oligonucleotide array probe level data. *Biostatistics*. 2003;4(2):249–264. https://doi.org/10.1093/biostatistics/4.2.249
+5. Bioconductor GEOquery, affy, and limma package documentation.
