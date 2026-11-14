@@ -1,0 +1,8 @@
+GSE19804 differential-expression analysis
+Samples analysed: 120
+Adjacent normal: 60
+Tumour: 60
+Probe sets tested: 54675
+Probe sets with BH-adjusted p-value < 0.05: 21862
+GEO retrieval date: 2026-11-13
+Contrast: Tumour minus Adjacent_Normal; logFC > 0 indicates higher expression in tumour.
